@@ -34,16 +34,32 @@ namespace :poll do
       resp = get_post_req(encode_bbb_uri('getMeetings', server.url, server.secret))
       meetings = resp.xpath('/response/meetings/meeting')
 
+      server_users = 0
+      video_streams = 0
+
+      meetings.each do |meeting|
+        count = meeting.at_xpath('participantCount')
+        users = count.present? ? count.text.to_i : 0
+        server_users += users
+
+        streams = meeting.at_xpath('videoCount')
+        video_streams += streams.present? ? streams.text.to_i : 0
+      end
+
+      adj_load = video_streams * 100 + server_users * 10 + meetings.length
+
       if server.online
         # Update the load if the server is currently online
-        server.load = meetings.length * (server.load_multiplier.nil? ? 1.0 : server.load_multiplier.to_d)
+        #server.load = meetings.length * (server.load_multiplier.nil? ? 1.0 : server.load_multiplier.to_d)
+        server.load = adj_load
       else
         # Only bring the server online if the number of successful requests is >= the acceptable threshold
         next if server.increment_healthy < Rails.configuration.x.server_healthy_threshold
 
         Rails.logger.info("Server id=#{server.id} is healthy. Bringing back online...")
         server.reset_counters
-        server.load = meetings.length * (server.load_multiplier.nil? ? 1.0 : server.load_multiplier.to_d)
+        #server.load = meetings.length * (server.load_multiplier.nil? ? 1.0 : server.load_multiplier.to_d)
+        server.load = adj_load
         server.online = true
       end
     rescue StandardError => e
